@@ -1,6 +1,6 @@
 // ===========================================================================
 // SWEN90010 2019 - Assignment 2 Submission
-// by <INSERT BOTH NAMES, STUDENT NUMBERS, HERE>
+// by <Margareta Hardiyanti, 852105>, <Ivan Ken Weng Chee, 736901>
 // ===========================================================================
 
 module logger
@@ -74,19 +74,45 @@ pred recv_log_message[s, s' : State] {
 
 // =========================== Attacker Actions ==============================
 
-// <FILL IN HERE>
+// This models the action in which the attacker intercepts a
+// log message and prevents it from reaching the Logging Service,
+// by removing it from the network. 
 pred attacker_action_drop[s, s' : State] {
-  // <FILL IN HERE>
+  (some msg : LogMessage |
+    msg in s.network and
+    s'.network = s.network - msg) and
+  // ask
+  s'.log = s.log and
+  s'.last_action = DropMessage
 }
 
-// <FILL IN HERE>
+// This models the action in which the attacker invents a new
+// log message and injects it into the network, to be received
+// by the Logging Service. This action can only be performed
+// when the network does not already contain a message. 
 pred attacker_action_fabricate[s, s' : State] {
-  // <FILL IN HERE>
+  (some msg : LogMessage |
+    no s.network and
+    msg not in s.log.elems and
+    s'.network = s'.network + msg) and
+  s'.log = s.log and
+  s'.last_action = FabricateMessage
 }
 
-// <FILL IN HERE>
+// This models the action in which the attacker injects an old
+// message onto the network, i.e. a message that was already
+// present on the network in some prior state of the model.
+// This action can only be performed when the network does
+// not already contain a message.
 pred attacker_action_replay[s, s' : State] {
-  // <FILL IN HERE>
+  (all s'' : State |
+    s'' in s.prevs and
+    (some msg : LogMessage |
+      no s.network and
+      msg in s''.network and
+      s'.network = s.network + msg)) and
+  s'.log = s.log and
+  s'.last_action = ReplayMessage
 }
 
 // =========================== State Transitions and Traces ==================
@@ -132,9 +158,54 @@ assert log_only_grows {
 
 check log_only_grows for 10 expect 0
 
-// <FILL IN HERE>
+// Assert the correctness of the log with respect to the execution
+// trace leading to state s. If log correct holds for all states s,
+// then it should be the case that the log only ever contains
+// messages that were sent by the Sender and that the messages
+// in the log should not be out of order. 
 pred log_correct[s : State] {
-  // <FILL IN HERE>
+  (all s' : State |
+    s' in (prevs[s] + s) and
+    (some msg : LogMessage |
+      (
+        // send(A) > recv(A)
+        s'.last_action in RecvLogMessage and
+        prev[s'].last_action in SendLogMessage and
+        msg in prev[s'].network and
+        msg in last[s'.log]
+      ) or (
+        // drop(A) > recv(A)
+        s'.last_action in RecvLogMessage and
+        prev[s'].last_action in DropMessage and
+        msg in prev[s'].network and
+        msg not in last[s'.log]      
+      ) or (
+        // fabr(A) > recv(A)
+        s'.last_action in RecvLogMessage and
+        prev[s'].last_action in FabricateMessage and
+        msg in prev[s'].network and
+        msg not in last[s'.log]
+      ) or (
+        // send(A) > lost(A) > repl(A) > recv(A)
+        s'.last_action in RecvLogMessage and
+        prev[s'].last_action in ReplayMessage and
+        prev[prev[s']].last_action in SendLogMessage and
+        msg in prev[prev[s']].network and
+        msg in prev[s'].network and
+        msg not in last[s'.log]
+      ) or (
+        // send(A) > drop(A) > repl(A) > recv(A)
+        s'.last_action in RecvLogMessage and
+        prev[s'].last_action in ReplayMessage and 
+        prev[prev[s']].last_action in DropMessage and 
+        prev[prev[prev[s']]].last_action in SendLogMessage and 
+        msg in prev[prev[prev[s']]].network and
+        msg in prev[prev[s']].network and
+        msg in prev[s'].network and
+        msg in last[s'.log]
+      )
+    )
+  )
 }
 
 // used to specify the log_correct_* predicates below
