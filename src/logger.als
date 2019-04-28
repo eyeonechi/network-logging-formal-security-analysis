@@ -92,7 +92,6 @@ pred attacker_action_drop[s, s' : State] {
 pred attacker_action_fabricate[s, s' : State] {
   (some msg : LogMessage |
     no s.network and
-    msg not in s.log.elems and
     s'.network = s'.network + msg) and
   s'.log = s.log and
   s'.last_action = FabricateMessage
@@ -302,12 +301,12 @@ check log_correct_when_attacker_only_replays for 4 expect 1
 /*  The minimum state to detect the replays attack is 4 states
       State    | Network    | Last Action       | Log
       0          | -                | -                        | -
-      1          | LogMsg0   | Send                 | -
-      2          | -                | Recv                  | 0-> LogMsg0
-      3          | LogMsg0   | Replay              | 0-> LogMsg0
+      1          | LogMsg0   | SendMsg0        | -
+      2          | -                | RecvMsg0         | 0-> LogMsg0
+      3          | LogMsg0   | ReplayMsg0     | 0-> LogMsg0
       The attacker replays a message when a message has been sent
       by the sender in the previous state. In the next state, the replayed
-      message will be logged in the log
+      message will be logged in the log, which is incorrect.
  */
 
 assert log_correct_when_attacker_only_fabricates {
@@ -316,7 +315,16 @@ assert log_correct_when_attacker_only_fabricates {
 // <Adjust these thresholds as necessary to find the smallest
 //  attack you can, when such an attack exists, in each attacker model>
 check log_correct_when_attacker_only_fabricates for 2 expect 1
-// <Add attack description here>
+/*  The minimum state to detect the fabricate attack is 2 states
+      State    | Network    | Last Action       | Log
+      0          | -                | -                        | -
+      1          | LogMsg0   | FabricateMsg0 | -
+      The attacker fabricates a new message before anything has been sent.
+      In the following state, the log will contain the fabricated message,
+      leading to an incorrect log.
+ */
 
 // <Describe any additional attacks that are possible but are not
 //  captured by your model here>
+/* 
+*/
