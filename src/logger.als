@@ -81,7 +81,6 @@ pred attacker_action_drop[s, s' : State] {
   (some msg : LogMessage |
     msg in s.network and
     s'.network = s.network - msg) and
-  // ask
   s'.log = s.log and
   s'.last_action = DropMessage
 }
@@ -105,7 +104,7 @@ pred attacker_action_fabricate[s, s' : State] {
 // This action can only be performed when the network does
 // not already contain a message.
 pred attacker_action_replay[s, s' : State] {
-  (all s'' : State |
+  (some s'' : State |
     s'' in s.prevs and
     (some msg : LogMessage |
       no s.network and
@@ -166,20 +165,73 @@ check log_only_grows for 10 expect 0
 pred log_correct[s : State] {
   (all s' : State |
     s' in (prevs[s] + s) and
+    ( // initial state
+        no s'.last_action and no s'.log and no s'.network
+    ) or
     (some msg : LogMessage |
       (
+	 s'.last_action in SendLogMessage and
+        no prev[s'].last_action and
+        msg in s'.network
+        //prev[s'].log.elems in s'.log.elems
+      ) or (
+        s'.last_action in SendLogMessage and
+        msg in s'.network and
+        prev[s'].log.elems in s'.log.elems
+      ) or (
         // send(A) > recv(A)
         s'.last_action in RecvLogMessage and
         prev[s'].last_action in SendLogMessage and
-        msg in prev[s'].network and
-        msg in last[s'.log]
-      ) or (
-        // drop(A) > recv(A)
-        s'.last_action in RecvLogMessage and
+        last[s'.log] in prev[s'].network
+	// s'.log.elems in (prev[s'].log.elems + msg) and
+        
+   //	msg not in s'.network
+   	  ) or (
+          s'.last_action in DropMessage and
+          no s'.network and
+          s'.log.elems in prev[s'].log.elems
+         ) or (
+        //send(A) > recv(A) > send(A) > drop(A) > recv(A)
+      	 s'.last_action in RecvLogMessage and
         prev[s'].last_action in DropMessage and
+        prev[prev[s']].last_action in SendLogMessage and
+        msg in prev[prev[s']].network and
+        msg not in prev[s'].network and
+        s'.log.elems in prev[prev[s']].log.elems
+	) or (
+ 	//send(A) > drop (A) > send(A) 
+	 s'.last_action in SendLogMessage and
+        prev[s'].last_action in DropMessage and
+        prev[prev[s']].last_action in SendLogMessage and
+   	 msg in prev[prev[s']].network and
+        msg not in prev[s'].network and
+	 msg in s'.network and
+	 prev[s'].log.elems in prev[prev[s']].log.elems and
+        s'.log.elems in prev[prev[s']].log.elems
+	) or (
+	//send(A) > drop (A) > send(A) > recv (A) 
+	 s'.last_action in RecvLogMessage and
+        prev[s'].last_action in SendLogMessage and
+        prev[prev[s']].last_action in DropMessage and
+	 prev[prev[prev[s']]].last_action in SendLogMessage and
+	 msg not in s'.network and
+ 	 msg in prev[s'].network and
+   	 msg not in prev[prev[s']].network and
         msg in prev[s'].network and
-        msg not in last[s'.log]      
-      ) or (
+	 msg in prev[prev[prev[s']]].network and
+	 (prev[prev[prev[s']]].log.elems + prev[s'].network) in s'.log.elems// and
+      //  s'.log.elems in prev[prev[s']].log.elems
+       ) or (
+         s'.last_action in RecvLogMessage and
+         prev[s'].last_action in FabricateMessage and
+         prev[s'].network not in last[s'.log] and
+         s'.log.elems in prev[s'].log.elems
+       ) or (
+         s'.last_action in RecvLogMessage and
+         prev[s'].last_action in ReplayMessage and
+         prev[s'].network not in last[s'.log] and
+         s'.log.elems in prev[s'].log.elems
+  /*    ) or (
         // fabr(A) > recv(A)
         s'.last_action in RecvLogMessage and
         prev[s'].last_action in FabricateMessage and
@@ -194,15 +246,15 @@ pred log_correct[s : State] {
         msg in prev[s'].network and
         msg not in last[s'.log]
       ) or (
-        // send(A) > drop(A) > repl(A) > recv(A)
+         // send(A) > drop(A) > repl(A) > recv(A)
         s'.last_action in RecvLogMessage and
         prev[s'].last_action in ReplayMessage and 
         prev[prev[s']].last_action in DropMessage and 
         prev[prev[prev[s']]].last_action in SendLogMessage and 
-        msg in prev[prev[prev[s']]].network and
+        msg in prev[prev[prev[s']]].network and	
         msg in prev[prev[s']].network and
         msg in prev[s'].network and
-        msg in last[s'.log]
+        msg in last[s'.log]*/
       )
     )
   )
