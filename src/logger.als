@@ -163,6 +163,7 @@ check log_only_grows for 10 expect 0
 // messages that were sent by the Sender and that the messages
 // in the log should not be out of order. 
 pred log_correct[s : State] {
+ // check_ordering[s] and
   (all s' : State |
     s' in (prevs[s] + s) and
     ( // initial state
@@ -260,6 +261,26 @@ pred log_correct[s : State] {
   )
 }
 
+pred check_ordering[s : State] {
+  (some s' , sender: State |
+    Init[sender] and
+    (
+      s' in (prevs[s] + s) and
+      s'.last_action in SendLogMessage //and
+    /*  (some msg : LogMessage |
+        msg in s'.network and
+        sender.log = sender.log.add[msg]
+      )*/
+    ) /*and (
+      (some msg : LogMessage |
+        msg in sender.log.elems and
+        msg in s'.log.elems and
+        lte[sender.log.idxOf[msg], s'.log.idxOf[msg]]
+      )
+    )*/
+  )
+}
+
 // used to specify the log_correct_* predicates below
 pred attacker_only[actions : AttackerAction] {
   all s : State | s.last_action in AttackerAction implies s.last_action in actions
@@ -277,15 +298,24 @@ assert log_correct_when_attacker_only_replays {
 }
 // <Adjust these thresholds as necessary to find the smallest
 //  attack you can, when such an attack exists, in each attacker model>
-check log_correct_when_attacker_only_replays for 10 expect 1
-// <Add attack description here>
+check log_correct_when_attacker_only_replays for 4 expect 1
+/*  The minimum state to detect the replays attack is 4 states
+      State    | Network    | Last Action       | Log
+      0          | -                | -                        | -
+      1          | LogMsg0   | Send                 | -
+      2          | -                | Recv                  | 0-> LogMsg0
+      3          | LogMsg0   | Replay              | 0-> LogMsg0
+      The attacker replays a message when a message has been sent
+      by the sender in the previous state. In the next state, the replayed
+      message will be logged in the log
+ */
 
 assert log_correct_when_attacker_only_fabricates {
   all s : State | attacker_only[FabricateMessage] implies log_correct[s]
 }
 // <Adjust these thresholds as necessary to find the smallest
 //  attack you can, when such an attack exists, in each attacker model>
-check log_correct_when_attacker_only_fabricates for 10 expect 1
+check log_correct_when_attacker_only_fabricates for 2 expect 1
 // <Add attack description here>
 
 // <Describe any additional attacks that are possible but are not
