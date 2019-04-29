@@ -1,6 +1,6 @@
 // ===========================================================================
 // SWEN90010 2019 - Assignment 2 Submission
-// by <<Margareta Hardiyanti, 852105>, <Ivan Ken Weng Chee, 736901>>
+// by <Margareta Hardiyanti, 852105>, <Ivan Ken Weng Chee, 736901>
 // ===========================================================================
 
 module logger
@@ -77,6 +77,9 @@ pred recv_log_message[s, s' : State] {
 // This models the action in which the attacker intercepts a
 // log message and prevents it from reaching the Logging Service,
 // by removing it from the network. 
+// Precondition : A message exists on the network
+// Postcondition : The message on the network is removed
+//                            and nothing else changes
 pred attacker_action_drop[s, s' : State] {
   (some msg : LogMessage |
     msg in s.network and
@@ -89,6 +92,9 @@ pred attacker_action_drop[s, s' : State] {
 // log message and injects it into the network, to be received
 // by the Logging Service. This action can only be performed
 // when the network does not already contain a message. 
+// Precondition : A message does not exist on the network
+// Postcondition : Add a new message on the network
+//                            and nothing else changes        
 pred attacker_action_fabricate[s, s' : State] {
   (some msg : LogMessage |
     no s.network and
@@ -102,6 +108,10 @@ pred attacker_action_fabricate[s, s' : State] {
 // present on the network in some prior state of the model.
 // This action can only be performed when the network does
 // not already contain a message.
+// Precondition : A message does not exist on the network
+//			  the message is already present in the log
+// Postcondition : Add the message on the network
+//                            and nothing else changes   
 pred attacker_action_replay[s, s' : State] {
   (some s'' : State |
     s'' in s.prevs and
@@ -163,8 +173,7 @@ check log_only_grows for 10 expect 0
 // in the log should not be out of order. 
 pred log_correct[s : State] {
   correct_ordering[s] and
-  from_sender[s]
-  /*(all s' : State |
+  (all s' : State |
     s' in (prevs[s] + s) and
     ( // initial state
         no s'.last_action and no s'.log and no s'.network
@@ -232,12 +241,6 @@ pred log_correct[s : State] {
          prev[s'].last_action in ReplayMessage and
          prev[s'].network not in last[s'.log] and
          s'.log.elems in prev[s'].log.elems
-
-      )
-    )
-  )*/
-}
-
   /*    ) or (
         // fabr(A) > recv(A)
         s'.last_action in RecvLogMessage and
@@ -262,6 +265,10 @@ pred log_correct[s : State] {
         msg in prev[prev[s']].network and
         msg in prev[s'].network and
         msg in last[s'.log]*/
+      )
+    )
+  )
+}
 
 fun get_sender_messages [s: State] : seq LogMessage {
   seq (prevs[s] + s - first).network
