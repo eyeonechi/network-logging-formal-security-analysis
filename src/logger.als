@@ -8,26 +8,24 @@ open util/ordering[State] as ord
 
 // =========================== System State ==================================
 
-// the type of network log messages
+// The type of network log messages
 sig LogMessage {}
 
-// meta information in the model that identifies the last action performed
+// Meta information in the model that identifies the last action performed
 abstract sig Action {}
-one sig SendLogMessage, RecvLogMessage 
-        extends Action {}
+one sig SendLogMessage, RecvLogMessage extends Action {}
 
 abstract sig AttackerAction extends Action {}
 one sig DropMessage, FabricateMessage, ReplayMessage extends AttackerAction {}
 
 // The system state
 sig State {
-  network : lone LogMessage,       // Network state: holds up to one message
-  log     : seq LogMessage,        // The log: a sequence of messages
-  last_action : lone Action,       // identifies the most recent action 
-                                   // performed
+  network    : lone LogMessage, // Network state: holds up to one message
+  log        : seq LogMessage,  // The log: a sequence of messages
+  last_action: lone Action,     // Identifies the most recent action performed
 }
 
-// an axiom that restricts the model to never allow more than one messasge on
+// An axiom that restricts the model to never allow more than one messasge on
 // the network at a time; a simplifying assumption to ease the analysis
 fact {
   all s : State | lone s.network
@@ -46,29 +44,32 @@ pred Init[s : State] {
 // =========================== Actions =======================================
 
 // Models the action in which a LogMessage log message is sent
-// Precondition: the network is empty
-// Postcondition: network contains a new message
+// Precondition : The network is empty
+// Postcondition: Network contains a new message
 //                last_action is SendLogMessage
 //                and nothing else changes
 pred send_log_message[s, s' : State] {
   no s.network and
   s'.last_action = SendLogMessage and
   s'.log = s.log and
-  (some msg : LogMessage | 
-    (s'.network = s.network + msg))
+  some msg : LogMessage | (
+    (s'.network = s.network + msg)
+  )
 }
 
 // Models the action in which a log message is received
 // by the logger, causing the log to be updated
 // and the message to be removed from the network.
-// Precondition: exists some LogMessage message m on network
-// Postcondition: contents of message m added to the log
+// Precondition : Exists some LogMessage message m on network
+// Postcondition: Contents of message m added to the log
 //                message m is removed from the network
 //                last_action is RecvLogMessage
 pred recv_log_message[s, s' : State] {
-  (some msg : LogMessage | 
-       msg in s.network and s'.log = s.log.add[msg] and
-       s'.network = s.network - msg) and
+  some msg : LogMessage | (
+    msg in s.network and
+    s'.log = s.log.add[msg] and
+    s'.network = s.network - msg
+  ) and
   s'.last_action = RecvLogMessage
 }
 
@@ -78,12 +79,13 @@ pred recv_log_message[s, s' : State] {
 // log message and prevents it from reaching the Logging Service,
 // by removing it from the network. 
 // Precondition : A message exists on the network
-// Postcondition : The message on the network is removed
-//                            and nothing else changes
+// Postcondition: The message on the network is removed
+//                and nothing else changes
 pred attacker_action_drop[s, s' : State] {
-  (some msg : LogMessage |
+  some msg : LogMessage | (
     msg in s.network and
-    s'.network = s.network - msg) and
+    s'.network = s.network - msg
+  ) and
   s'.log = s.log and
   s'.last_action = DropMessage
 }
@@ -93,12 +95,13 @@ pred attacker_action_drop[s, s' : State] {
 // by the Logging Service. This action can only be performed
 // when the network does not already contain a message. 
 // Precondition : A message does not exist on the network
-// Postcondition : Add a new message on the network
-//                            and nothing else changes        
+// Postcondition: Add a new message on the network
+//                and nothing else changes        
 pred attacker_action_fabricate[s, s' : State] {
-  (some msg : LogMessage |
+  some msg : LogMessage | (
     no s.network and
-    s'.network = s'.network + msg) and
+    s'.network = s'.network + msg
+  ) and
   s'.log = s.log and
   s'.last_action = FabricateMessage
 }
@@ -113,12 +116,14 @@ pred attacker_action_fabricate[s, s' : State] {
 // Postcondition : Add the message on the network
 //                            and nothing else changes   
 pred attacker_action_replay[s, s' : State] {
-  (some s'' : State |
+  some s'' : State | (
     s'' in s.prevs and
-    (some msg : LogMessage |
+    some msg : LogMessage | (
       no s.network and
       msg in s''.network and
-      s'.network = s.network + msg)) and
+      s'.network = s.network + msg
+    )
+  ) and
   s'.log = s.log and
   s'.last_action = ReplayMessage
 }
@@ -160,8 +165,8 @@ fact init_state {
 // added to it but nothing is ever removed
 assert log_only_grows {
   all s : State | all s' : ord/nexts[s] |
-     some (s.log.elems) implies 
-     (all idx : Int | idx < #(s.log) implies  s.log[idx] = s'.log[idx])
+    some (s.log.elems) implies 
+    (all idx : Int | idx < #(s.log) implies s.log[idx] = s'.log[idx])
 }
 
 check log_only_grows for 10 expect 0
@@ -172,100 +177,98 @@ check log_only_grows for 10 expect 0
 // messages that were sent by the Sender and that the messages
 // in the log should not be out of order. 
 pred log_correct[s : State] {
-  correct_ordering[s] and
-  (all s' : State |
-    s' in (prevs[s] + s) and
-    ( // initial state
-        no s'.last_action and no s'.log and no s'.network
+  // correct_ordering[s] and
+  // from_sender[s] and
+  all s' : State | (
+    s' in (prevs[s] + s) and (
+      // initial state
+      no s'.last_action and no s'.log and no s'.network
     ) or
-    (some msg : LogMessage |
-      (
-	 s'.last_action in SendLogMessage and
-        no prev[s'].last_action and
-        msg in s'.network
-        //prev[s'].log.elems in s'.log.elems
-      ) or (
-        s'.last_action in SendLogMessage and
-        msg in s'.network and
-        prev[s'].log.elems in s'.log.elems
-      ) or (
-        // send(A) > recv(A)
-        s'.last_action in RecvLogMessage and
-        prev[s'].last_action in SendLogMessage and
-        last[s'.log] in prev[s'].network
-	// s'.log.elems in (prev[s'].log.elems + msg) and
-        
-   //	msg not in s'.network
-   	  ) or (
-          s'.last_action in DropMessage and
-          no s'.network and
-          s'.log.elems in prev[s'].log.elems
-         ) or (
-        //send(A) > recv(A) > send(A) > drop(A) > recv(A)
-      	 s'.last_action in RecvLogMessage and
-        prev[s'].last_action in DropMessage and
-        prev[prev[s']].last_action in SendLogMessage and
-        msg in prev[prev[s']].network and
-        msg not in prev[s'].network and
-        s'.log.elems in prev[prev[s']].log.elems
-	) or (
- 	//send(A) > drop (A) > send(A) 
-	 s'.last_action in SendLogMessage and
-        prev[s'].last_action in DropMessage and
-        prev[prev[s']].last_action in SendLogMessage and
-   	 msg in prev[prev[s']].network and
-        msg not in prev[s'].network and
-	 msg in s'.network and
-	 prev[s'].log.elems in prev[prev[s']].log.elems and
-        s'.log.elems in prev[prev[s']].log.elems
-	) or (
-	//send(A) > drop (A) > send(A) > recv (A) 
-	 s'.last_action in RecvLogMessage and
-        prev[s'].last_action in SendLogMessage and
-        prev[prev[s']].last_action in DropMessage and
-	 prev[prev[prev[s']]].last_action in SendLogMessage and
-	 msg not in s'.network and
- 	 msg in prev[s'].network and
-   	 msg not in prev[prev[s']].network and
-        msg in prev[s'].network and
-	 msg in prev[prev[prev[s']]].network and
-	 (prev[prev[prev[s']]].log.elems + prev[s'].network) in s'.log.elems// and
-      //  s'.log.elems in prev[prev[s']].log.elems
-       ) or (
-         s'.last_action in RecvLogMessage and
-         prev[s'].last_action in FabricateMessage and
-         prev[s'].network not in last[s'.log] and
-         s'.log.elems in prev[s'].log.elems
-       ) or (
-         s'.last_action in RecvLogMessage and
-         prev[s'].last_action in ReplayMessage and
-         prev[s'].network not in last[s'.log] and
-         s'.log.elems in prev[s'].log.elems
-  /*    ) or (
-        // fabr(A) > recv(A)
-        s'.last_action in RecvLogMessage and
-        prev[s'].last_action in FabricateMessage and
-        msg in prev[s'].network and
-        msg not in last[s'.log]
-      ) or (
-        // send(A) > lost(A) > repl(A) > recv(A)
-        s'.last_action in RecvLogMessage and
-        prev[s'].last_action in ReplayMessage and
-        prev[prev[s']].last_action in SendLogMessage and
-        msg in prev[prev[s']].network and
-        msg in prev[s'].network and
-        msg not in last[s'.log]
-      ) or (
-         // send(A) > drop(A) > repl(A) > recv(A)
-        s'.last_action in RecvLogMessage and
-        prev[s'].last_action in ReplayMessage and 
-        prev[prev[s']].last_action in DropMessage and 
-        prev[prev[prev[s']]].last_action in SendLogMessage and 
-        msg in prev[prev[prev[s']]].network and	
-        msg in prev[prev[s']].network and
-        msg in prev[s'].network and
-        msg in last[s'.log]*/
-      )
+    some msg : LogMessage | (
+      s'.last_action in SendLogMessage and
+      no prev[s'].last_action and
+      msg in s'.network
+    ) or (
+      // send(A)
+      s'.last_action in SendLogMessage and
+      msg in s'.network and
+      prev[s'].log.elems in s'.log.elems
+    ) or (
+      // send(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in SendLogMessage and
+      last[s'.log] in prev[s'].network
+    ) or (
+      // drop(A)
+      s'.last_action in DropMessage and
+      no s'.network and
+      s'.log.elems in prev[s'].log.elems
+    ) or (
+      // send(A) > recv(A) > send(A) > drop(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in DropMessage and
+      prev[prev[s']].last_action in SendLogMessage and
+      msg in prev[prev[s']].network and
+      msg not in prev[s'].network and
+      s'.log.elems in prev[prev[s']].log.elems
+    ) or (
+      // send(A) > drop (A) > send(A) 
+      s'.last_action in SendLogMessage and
+      prev[s'].last_action in DropMessage and
+      prev[prev[s']].last_action in SendLogMessage and
+      msg in prev[prev[s']].network and
+      msg not in prev[s'].network and
+      msg in s'.network and
+      prev[s'].log.elems in prev[prev[s']].log.elems and
+      s'.log.elems in prev[prev[s']].log.elems
+    ) or (
+      // send(A) > drop (A) > send(A) > recv (A) 
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in SendLogMessage and
+      prev[prev[s']].last_action in DropMessage and
+      prev[prev[prev[s']]].last_action in SendLogMessage and
+      msg not in s'.network and
+      msg in prev[s'].network and
+      msg not in prev[prev[s']].network and
+      msg in prev[s'].network and
+      msg in prev[prev[prev[s']]].network and
+      (prev[prev[prev[s']]].log.elems + prev[s'].network) in s'.log.elems
+    ) or (
+      // fabr(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in FabricateMessage and
+      prev[s'].network not in last[s'.log] and
+      s'.log.elems in prev[s'].log.elems
+    ) or (
+      // repl(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in ReplayMessage and
+      prev[s'].network not in last[s'.log] and
+      s'.log.elems in prev[s'].log.elems
+    ) or (
+      // fabr(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in FabricateMessage and
+      msg in prev[s'].network and
+      msg not in last[s'.log]
+    ) or (
+      // send(A) > lost(A) > repl(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in ReplayMessage and
+      prev[prev[s']].last_action in SendLogMessage and
+      msg in prev[prev[s']].network and
+      msg in prev[s'].network and
+      msg not in last[s'.log]
+    ) or (
+      // send(A) > drop(A) > repl(A) > recv(A)
+      s'.last_action in RecvLogMessage and
+      prev[s'].last_action in ReplayMessage and 
+      prev[prev[s']].last_action in DropMessage and 
+      prev[prev[prev[s']]].last_action in SendLogMessage and 
+      msg in prev[prev[prev[s']]].network and	
+      msg in prev[prev[s']].network and
+      msg in prev[s'].network and
+      msg in last[s'.log]
     )
   )
 }
@@ -286,6 +289,7 @@ pred correct_ordering[s : State] {
   )
 }
 
+/*
 pred from_sender[s : State] {
   all s' : State | (
     s' in (prevs[s] + s - first) and
@@ -296,8 +300,9 @@ pred from_sender[s : State] {
     )
   )
 }
+*/
 
-// used to specify the log_correct_* predicates below
+// Used to specify the log_correct_* predicates below
 pred attacker_only[actions : AttackerAction] {
   all s : State | s.last_action in AttackerAction implies s.last_action in actions
 }
@@ -315,15 +320,16 @@ assert log_correct_when_attacker_only_replays {
 // <Adjust these thresholds as necessary to find the smallest
 //  attack you can, when such an attack exists, in each attacker model>
 check log_correct_when_attacker_only_replays for 4 expect 1
-/*  The minimum state to detect the replays attack is 4 states
-      State    | Network    | Last Action       | Log
-      0          | -                | -                        | -
-      1          | LogMsg0   | SendMsg0        | -
-      2          | -                | RecvMsg0         | 0-> LogMsg0
-      3          | LogMsg0   | ReplayMsg0     | 0-> LogMsg0
-      The attacker replays a message when a message has been sent
-      by the sender in the previous state. In the next state, the replayed
-      message will be logged in the log, which is incorrect.
+/*
+  The minimum state to detect the replays attack is 4 states
+    State   | Network   | Last Action | Log
+    0       | -         | -           | -
+    1       | LogMsg0   | SendMsg0    | -
+    2       | -         | RecvMsg0    | 0-> LogMsg0
+    3       | LogMsg0   | ReplayMsg0  | 0-> LogMsg0
+  The attacker replays a message when a message has been sent
+  by the sender in the previous state. In the next state, the replayed
+  message will be logged in the log, which is incorrect.
  */
 
 assert log_correct_when_attacker_only_fabricates {
@@ -332,16 +338,17 @@ assert log_correct_when_attacker_only_fabricates {
 // <Adjust these thresholds as necessary to find the smallest
 //  attack you can, when such an attack exists, in each attacker model>
 check log_correct_when_attacker_only_fabricates for 2 expect 1
-/*  The minimum state to detect the fabricate attack is 2 states
-      State    | Network    | Last Action       | Log
-      0          | -                | -                        | -
-      1          | LogMsg0   | FabricateMsg0 | -
-      The attacker fabricates a new message before anything has been sent.
-      In the following state, the log will contain the fabricated message,
-      leading to an incorrect log.
+/*
+  The minimum state to detect the fabricate attack is 2 states
+    State  | Network   | Last Action   | Log
+    0      | -         | -             | -
+    1      | LogMsg0   | FabricateMsg0 | -
+  The attacker fabricates a new message before anything has been sent.
+  In the following state, the log will contain the fabricated message,
+  leading to an incorrect log.
  */
 
 // <Describe any additional attacks that are possible but are not
 //  captured by your model here>
-/* 
-*/
+/*
+ */
