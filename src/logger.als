@@ -77,6 +77,9 @@ pred recv_log_message[s, s' : State] {
 // This models the action in which the attacker intercepts a
 // log message and prevents it from reaching the Logging Service,
 // by removing it from the network. 
+// Precondition : A message exists on the network
+// Postcondition : The message on the network is removed
+//                            and nothing else changes
 pred attacker_action_drop[s, s' : State] {
   (some msg : LogMessage |
     msg in s.network and
@@ -89,6 +92,9 @@ pred attacker_action_drop[s, s' : State] {
 // log message and injects it into the network, to be received
 // by the Logging Service. This action can only be performed
 // when the network does not already contain a message. 
+// Precondition : A message does not exist on the network
+// Postcondition : Add a new message on the network
+//                            and nothing else changes        
 pred attacker_action_fabricate[s, s' : State] {
   (some msg : LogMessage |
     no s.network and
@@ -102,6 +108,10 @@ pred attacker_action_fabricate[s, s' : State] {
 // present on the network in some prior state of the model.
 // This action can only be performed when the network does
 // not already contain a message.
+// Precondition : A message does not exist on the network
+//			  the message is already present in the log
+// Postcondition : Add the message on the network
+//                            and nothing else changes   
 pred attacker_action_replay[s, s' : State] {
   (some s'' : State |
     s'' in s.prevs and
