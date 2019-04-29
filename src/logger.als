@@ -1,6 +1,6 @@
 // ===========================================================================
 // SWEN90010 2019 - Assignment 2 Submission
-// by <Margareta Hardiyanti, 852105>, <Ivan Ken Weng Chee, 736901>
+// by <<Margareta Hardiyanti, 852105>, <Ivan Ken Weng Chee, 736901>>
 // ===========================================================================
 
 module logger
@@ -162,8 +162,9 @@ check log_only_grows for 10 expect 0
 // messages that were sent by the Sender and that the messages
 // in the log should not be out of order. 
 pred log_correct[s : State] {
- // check_ordering[s] and
-  (all s' : State |
+  correct_ordering[s] and
+  from_sender[s]
+  /*(all s' : State |
     s' in (prevs[s] + s) and
     ( // initial state
         no s'.last_action and no s'.log and no s'.network
@@ -231,6 +232,12 @@ pred log_correct[s : State] {
          prev[s'].last_action in ReplayMessage and
          prev[s'].network not in last[s'.log] and
          s'.log.elems in prev[s'].log.elems
+
+      )
+    )
+  )*/
+}
+
   /*    ) or (
         // fabr(A) > recv(A)
         s'.last_action in RecvLogMessage and
@@ -255,28 +262,31 @@ pred log_correct[s : State] {
         msg in prev[prev[s']].network and
         msg in prev[s'].network and
         msg in last[s'.log]*/
-      )
+
+fun get_sender_messages [s: State] : seq LogMessage {
+  seq (prevs[s] + s - first).network
+}
+
+pred correct_ordering[s : State] {
+  some s' : State | (
+    s' in (prevs[s] + s) and
+    all msg : LogMessage | (
+      no s'.log or
+      msg in get_sender_messages[s].elems and
+      msg in s'.log.elems and
+      lte[get_sender_messages[s].idxOf[msg], s'.log.idxOf[msg]]
     )
   )
 }
 
-pred check_ordering[s : State] {
-  (some s' , sender: State |
-    Init[sender] and
-    (
-      s' in (prevs[s] + s) and
-      s'.last_action in SendLogMessage //and
-    /*  (some msg : LogMessage |
-        msg in s'.network and
-        sender.log = sender.log.add[msg]
-      )*/
-    ) /*and (
-      (some msg : LogMessage |
-        msg in sender.log.elems and
-        msg in s'.log.elems and
-        lte[sender.log.idxOf[msg], s'.log.idxOf[msg]]
-      )
-    )*/
+pred from_sender[s : State] {
+  all s' : State | (
+    s' in (prevs[s] + s - first) and
+    s'.last_action not in SendLogMessage and
+    some msg : LogMessage | (
+      msg in s'.network and
+      msg not in s'.log.elems
+    )
   )
 }
 
