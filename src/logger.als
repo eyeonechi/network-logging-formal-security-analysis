@@ -37,7 +37,8 @@ fact {
 //   - empty network, 
 //   - log is empty
 pred Init[s : State] {
-  no s.network and no s.log.elems and
+  no s.network and
+  no s.log.elems and
   no s.last_action
 }
 
@@ -177,34 +178,46 @@ check log_only_grows for 10 expect 0
 // messages that were sent by the Sender and that the messages
 // in the log should not be out of order. 
 pred log_correct[s : State] {
-  // correct_ordering[s] and
-  // from_sender[s] and
   all s' : State | (
+	// 
     s' in (prevs[s] + s) and (
       // initial state
-      no s'.last_action and no s'.log and no s'.network
+      no s'.last_action and
+      no s'.log and
+      no s'.network
     ) or
+	// This method is used to make sure that every time the message is sent by a sender, 
+	// it is checked that the message is put on the network
     some msg : LogMessage | (
       s'.last_action in SendLogMessage and
       no prev[s'].last_action and
       msg in s'.network
     ) or (
       // send(A)
+	  // This method is used to check that the log stays the same after a send action is executed.
       s'.last_action in SendLogMessage and
       msg in s'.network and
       prev[s'].log.elems in s'.log.elems
     ) or (
       // send(A) > recv(A)
+	  // This method is used to make sure that every time the message is received by a receiver, 
+	  // the new message stored in the log is the message which has been sent by the sender in the previous state
+	  // This also ensures that the message is being sent in correct order without interrupted by something else 
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in SendLogMessage and
       last[s'.log] in prev[s'].network
     ) or (
       // drop(A)
+	 // This method indicates that a message could lost in the network, then the message stored in the log should 
+	 // not change, means nothing intercepts in between.   
       s'.last_action in DropMessage and
       no s'.network and
       s'.log.elems in prev[s'].log.elems
     ) or (
-      // send(A) > recv(A) > send(A) > drop(A) > recv(A)
+      // send(A) > drop(A) > recv(A)
+	  // This method indicates if a message sent by a sender is dropped by an attacker, then the log message in the receiver state
+	  // should be the same with the log message in the state of the message sent. Thus, the log is still considered as correct as it allows
+	  // the message lost
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in DropMessage and
       prev[prev[s']].last_action in SendLogMessage and
@@ -213,6 +226,8 @@ pred log_correct[s : State] {
       s'.log.elems in prev[prev[s']].log.elems
     ) or (
       // send(A) > drop (A) > send(A) 
+	  // This method indicates if a message sent by a sender is dropped by an attacker, then a sender tries to send a message, the log message in the
+	  // last state should be the same with the log message in the state before the message is dropped.
       s'.last_action in SendLogMessage and
       prev[s'].last_action in DropMessage and
       prev[prev[s']].last_action in SendLogMessage and
@@ -223,6 +238,8 @@ pred log_correct[s : State] {
       s'.log.elems in prev[prev[s']].log.elems
     ) or (
       // send(A) > drop (A) > send(A) > recv (A) 
+	  // This method indicates if a message sent by a sender is dropped by an attacker, then a sender tries to send a message again and received by the receiver
+	  // the log message in the last state should have the message which has been sent by the sender in the previous state, not include the message which has been dropped beforehand
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in SendLogMessage and
       prev[prev[s']].last_action in DropMessage and
@@ -235,24 +252,24 @@ pred log_correct[s : State] {
       (prev[prev[prev[s']]].log.elems + prev[s'].network) in s'.log.elems
     ) or (
       // fabr(A) > recv(A)
+	  // This method is used to ensure that if a message received by a receiver is fabricated by an attacker in the previous state, 
+	  // the correct log could not have the fabricated message in the log
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in FabricateMessage and
       prev[s'].network not in last[s'.log] and
       s'.log.elems in prev[s'].log.elems
     ) or (
       // repl(A) > recv(A)
+ 	  // This method used to ensure that if a message received by a receiver is replayed by an attacker in the previous state, 
+	  // the correct log could not have the replayed message in the log
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in ReplayMessage and
       prev[s'].network not in last[s'.log] and
       s'.log.elems in prev[s'].log.elems
     ) or (
-      // fabr(A) > recv(A)
-      s'.last_action in RecvLogMessage and
-      prev[s'].last_action in FabricateMessage and
-      msg in prev[s'].network and
-      msg not in last[s'.log]
-    ) or (
       // send(A) > lost(A) > repl(A) > recv(A)
+	  // This method is to ensure when a sender send a message, then lost in the middle of the state, so the attacker reply the same message
+	  // the correct log should not store the message in the log when a receiver receive the message 
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in ReplayMessage and
       prev[prev[s']].last_action in SendLogMessage and
@@ -261,6 +278,8 @@ pred log_correct[s : State] {
       msg not in last[s'.log]
     ) or (
       // send(A) > drop(A) > repl(A) > recv(A)
+	  // This method is to ensure when a sender send a message, then lost in the middle of the state, so the attacker reply the same message
+	  // the log should not have it stored in the log when a receiver receive the message
       s'.last_action in RecvLogMessage and
       prev[s'].last_action in ReplayMessage and 
       prev[prev[s']].last_action in DropMessage and 
@@ -272,35 +291,6 @@ pred log_correct[s : State] {
     )
   )
 }
-
-fun get_sender_messages [s: State] : seq LogMessage {
-  seq (prevs[s] + s - first).network
-}
-
-pred correct_ordering[s : State] {
-  some s' : State | (
-    s' in (prevs[s] + s) and
-    all msg : LogMessage | (
-      no s'.log or
-      msg in get_sender_messages[s].elems and
-      msg in s'.log.elems and
-      lte[get_sender_messages[s].idxOf[msg], s'.log.idxOf[msg]]
-    )
-  )
-}
-
-/*
-pred from_sender[s : State] {
-  all s' : State | (
-    s' in (prevs[s] + s - first) and
-    s'.last_action not in SendLogMessage and
-    some msg : LogMessage | (
-      msg in s'.network and
-      msg not in s'.log.elems
-    )
-  )
-}
-*/
 
 // Used to specify the log_correct_* predicates below
 pred attacker_only[actions : AttackerAction] {
@@ -351,4 +341,44 @@ check log_correct_when_attacker_only_fabricates for 2 expect 1
 // <Describe any additional attacks that are possible but are not
 //  captured by your model here>
 /*
+  Attacks which involve extending the model and log_correct to capture
+
+  1 An attacker could try to edit the message in the network without getting captured by this model, as it 
+	will be considered as an original message sent by a sender. In order to capture this behaviour, the model
+    needs to contain further signatures for LogMessages to have attributes such as message_content.
+    In this way, the attacker can modify the LogMessage contents and send it as if it was sent by
+    the Sender but already tampered with.
+    
+  2 An attacker could store a message somewhere (probably if he/she has their own log), and continue listening
+    for further messages sent by the sender. Once another message is sent, the attacker can then send the first
+    message to the receiver to cause the messages received to be out of order.
+
+  3 If LogMessages are extended to have unique id attributes, then Alloy will be able to distinguish identical
+    messages instead of treating them as the same object. The correct ordering of messages can now distinguish
+    if the sender sends the same message twice, or one message has been dropped and subsequently replayed by
+    the attacker.
+
+  4 If the system is extended to allow the receiver to send read receipts or acknowlegement back to the sender
+    when receiving a message (two way communication), then the sender will be able to identify if his/her
+    sent messages are lost by unreliable networks. This may also be a way to detect messages dropped by the attacker
+
+  5 Since this model is based on states of the system, the attacker can only manipulate the network in between
+    two states, and has to set their last action as such. For the receiver, a hard constraint may be placed such that
+    every action in the state immediately preceeding the current receive state must be a send state. This will render
+    the attacker useless unless he/she modifies the last_action of the state. It does sufficiently capture a real
+    world scenario where the network is transparent, and both sender and receiver cannot know if a real attacker
+    has intercepted the network.
+
+  6 We can add a message lost action to distinguish unreliable networks with the attacker dropping messages. Currently
+    there is no method to let Alloy randomly cause messages in the network to disappear.
+
+  Attacks which the existing system captures but possibly not captured by log_correct
+
+  1 If the attacker fabricates a message, then replays that identical message, it may violate the definition of
+    replaying sender messages because the attacker has a chance of replaying the message he/she fabricated.
+
+  2 If the attacker does nothing but simply stores messages on the network as they are sent by the sender,
+    the attacker is simply equivalent to the receiver, similar to eavesdropping on the network. This may
+    possibly be another attacker action, other than the original 3.
+
  */
